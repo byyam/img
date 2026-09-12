@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt Gallery · Prompt 效果预览</title>
+<style>
+  :root{
+    --bg:#f5f5f2; --surface:#ffffff; --border:#e2e2dd;
+    --text:#26262a; --muted:#6b6b70; --hint:#9a9a9f;
+    --accent:#534ab7; --accent-soft:#eeedfe;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6}
+  .wrap{max-width:1200px;margin:0 auto;padding:28px 20px 80px}
+  header{margin-bottom:8px}
+  h1{font-size:22px;font-weight:500}
+  .sub{color:var(--muted);font-size:13px;margin-top:2px}
+  .toolbar{display:flex;align-items:center;gap:10px;margin:18px 0 14px;flex-wrap:wrap}
+  .search{flex:1;min-width:220px;max-width:360px;border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:13px;font-family:inherit;background:var(--surface);outline:none}
+  .search:focus{border-color:var(--accent)}
+  .count{font-size:13px;color:var(--muted)}
+  .count b{color:var(--text)}
+  .grid{column-count:3;column-gap:16px}
+  @media(max-width:1000px){.grid{column-count:2}}
+  @media(max-width:640px){.grid{column-count:1}}
+  .card{break-inside:avoid;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px}
+  .imgbox{position:relative;cursor:pointer;overflow:hidden;background:#ececea}
+  .imgbox img{width:100%;display:block;transition:transform .25s}
+  .imgbox:hover img{transform:scale(1.02)}
+  .copyhint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(38,38,42,.45);opacity:0;transition:opacity .18s;pointer-events:none}
+  .imgbox:hover .copyhint{opacity:1}
+  .copyhint span{background:#fff;color:var(--accent);font-size:13px;font-weight:500;padding:8px 18px;border-radius:22px}
+  .imgbox.copied .copyhint{opacity:1}
+  .imgbox.copied .copyhint span{background:var(--accent);color:#fff}
+  .zoom{position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:8px;border:none;background:rgba(255,255,255,.9);color:var(--text);cursor:pointer;font-size:14px;line-height:1;opacity:0;transition:opacity .18s}
+  .imgbox:hover .zoom{opacity:1}
+  .card-body{padding:12px 14px 14px}
+  .card-title{font-size:14px;font-weight:500;margin-bottom:6px}
+  .prompt{font-size:12.5px;color:var(--muted);white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .prompt.expanded{-webkit-line-clamp:unset}
+  .card-foot{display:flex;align-items:center;gap:8px;margin-top:10px}
+  .more{border:none;background:none;color:var(--accent);font-size:12px;cursor:pointer;font-family:inherit;padding:2px 0}
+  .copybtn{margin-left:auto;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;border-radius:8px;padding:4px 12px;cursor:pointer;font-family:inherit}
+  .copybtn:hover{background:var(--accent-soft)}
+  .empty{color:var(--hint);text-align:center;padding:60px 0;font-size:13px}
+  /* lightbox */
+  #lightbox{position:fixed;inset:0;background:rgba(20,20,24,.78);display:none;align-items:center;justify-content:center;z-index:50;cursor:zoom-out}
+  #lightbox.show{display:flex}
+  #lightbox img{max-width:92vw;max-height:92vh;border-radius:8px}
+  /* toast */
+  .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#2c2c2a;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .22s;pointer-events:none;z-index:60}
+  .toast.show{opacity:.95}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Prompt Gallery</h1>
+    <div class="sub">点击图片即可复制对应 Prompt · 点放大镜查看大图</div>
+  </header>
+
+  <div class="toolbar">
+    <input class="search" id="search" type="text" placeholder="搜索标题或 prompt 关键词…">
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none">没有匹配的 prompt</div>
+</div>
+
+<div id="lightbox" onclick="this.classList.remove('show')"><img id="lbImg" alt=""></div>
+<div class="toast" id="toast"></div>
+
+<script src="gallery/data.js"></script>
+<script>
+"use strict";
+/* ============================================================
+ * 数据来源：gallery/data.js（由 gallery/build.py 自动生成）
+ * 新增条目：在 gallery/items/ 新建文件夹，放入 prompt.txt（第一行标题）
+ * 和图片文件，然后双击「双击重建数据.command」即可，无需修改本文件。
+ * ============================================================ */
+const PROMPTS = window.GALLERY_ITEMS || [];
+
+/* ---------- 渲染 ---------- */
+function esc(s){ return (s||"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove("show"), 1600);
+}
+async function copyPrompt(item, imgbox){
+  let ok = false;
+  try{
+    await navigator.clipboard.writeText(item.prompt);
+    ok = true;
+  }catch(e){
+    // 降级：老浏览器 / 非安全上下文
+    const ta = document.createElement("textarea");
+    ta.value = item.prompt;
+    ta.style.cssText = "position:fixed;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    try{ ok = document.execCommand("copy"); }catch(e2){ ok = false; }
+    ta.remove();
+  }
+  if(ok){
+    toast(`已复制「${item.title}」的 Prompt`);
+    if(imgbox){
+      imgbox.classList.add("copied");
+      clearTimeout(imgbox._h);
+      imgbox._h = setTimeout(()=>imgbox.classList.remove("copied"), 900);
+    }
+  }else{
+    toast("复制失败，请手动选中 prompt 文本复制");
+  }
+}
+function render(filter=""){
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  const kw = filter.trim().toLowerCase();
+  const list = PROMPTS.filter(p =>
+    !kw || p.title.toLowerCase().includes(kw) || p.prompt.toLowerCase().includes(kw)
+  );
+  document.getElementById("empty").style.display = list.length ? "none" : "block";
+  document.getElementById("count").innerHTML = `共 <b>${list.length}</b> 条`;
+  list.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="imgbox" title="点击复制 Prompt">
+        <img src="${esc(item.img)}" alt="${esc(item.title)}" loading="lazy">
+        <div class="copyhint"><span>已复制 Prompt ✓</span></div>
+        <button class="zoom" title="查看大图">⤢</button>
+      </div>
+      <div class="card-body">
+        <div class="card-title">${esc(item.title)}</div>
+        <div class="prompt">${esc(item.prompt)}</div>
+        <div class="card-foot">
+          <button class="more">展开全文</button>
+          <button class="copybtn">复制 Prompt</button>
+        </div>
+      </div>`;
+    const imgbox = card.querySelector(".imgbox");
+    imgbox.addEventListener("click", e => {
+      if(e.target.classList.contains("zoom")) return;
+      copyPrompt(item, imgbox);
+    });
+    imgbox.querySelector(".zoom").addEventListener("click", e => {
+      e.stopPropagation();
+      document.getElementById("lbImg").src = item.full || item.img;
+      document.getElementById("lightbox").classList.add("show");
+    });
+    const promptEl = card.querySelector(".prompt");
+    const moreBtn = card.querySelector(".more");
+    moreBtn.addEventListener("click", () => {
+      const ex = promptEl.classList.toggle("expanded");
+      moreBtn.textContent = ex ? "收起" : "展开全文";
+    });
+    card.querySelector(".copybtn").addEventListener("click", () => copyPrompt(item, imgbox));
+    grid.appendChild(card);
+  });
+}
+document.getElementById("search").addEventListener("input", e => render(e.target.value));
+render();
+</script>
+</body>
+</html>
