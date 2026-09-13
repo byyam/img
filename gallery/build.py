@@ -20,8 +20,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 仓库根�
 ITEMS_DIR = os.path.join(ROOT, "gallery", "items")
 OUT_FILE = os.path.join(ROOT, "gallery", "data.js")
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
-PREVIEW_MAX = 880           # 预览图最长边（页面卡片约 370px 宽，880px 已支持 2x 视网膜屏）
-PREVIEW_SIZE_LIMIT = 300 * 1024  # 原图超过 300KB 或边长超过 PREVIEW_MAX 就生成预览
+PREVIEW_MAX = 640           # 预览图最长边（页面卡片约 280px 宽，640px 足够 2x 视网膜屏）
+PREVIEW_SIZE_LIMIT = 200 * 1024  # 原图超过 200KB 或边长超过 PREVIEW_MAX 就生成预览
 
 
 def make_preview(src, dst):
